@@ -1,0 +1,234 @@
+#### 데이터 프레임 생성 clinical과 metadata 병합
+View(data@colData)
+asd <- data@colData
+asd <- as.data.frame(asd)
+asd <- asd[-c(120,351),]
+asd <- asd[,c(1,2,3,33)]                            #### metadataframe (필요한 barcode 부분만 파싱)
+
+#### clinical dataframe
+asdd <- clinical
+
+####
+colnames(asd)
+#### 두 가지 데이터프레임을 하나로 병합 (중복 발생)
+model <- merge(asd,asdd,by.x='patient',by.y='bcr_patient_barcode',all=F)
+
+##### 중복되지 않는 데이터만 남김
+model <- unique(model)                              
+
+#### group 설정
+data@colData$patient
+group3 <- model$ajcc_pathologic_n
+length(group3)
+
+#### 기존의 다양한 subtype을 N0,N1,N2로 변환하여 통일
+group3 <- gsub("N1c","N1",group3)
+group3 <- gsub("N2c","N2",group3)                   
+
+#### lymph node NA 값 찾기
+which(group3 %in% NA)
+
+#### 생존시간데이터
+time1 <- model[model$vital_status == 'Alive', ]
+time1 <- time1[,-13]
+time2 <- model[model$vital_status == 'Dead', ]
+time2 <- time2[,-14]
+
+write.csv(time, file='/home/gyw2626/time.csv')
+time <- read.csv(file="/home/gyw2626/time.csv",header = T)
+
+#### 최종데이터프레임 병합
+final <- cbind(model,time)                          #### 생존시간 데이터
+final <- cbind(final,group3)                        #### 림프구 상태 데이터
+
+View(final[c(4,81)])                                ######## lymph node status 확인
+
+####
+#### 생존여부
+final <- mutate(final,status=ifelse(final$vital_status=="Dead","1","0"))
+View(final[c(10,82)]) 
+
+#### 데이터 확인 (평균치 확인시)
+hist(final$survival_time)
+
+#### 5년기준 생존기간 column 생성
+month <- final$survival_time
+month <- month/30
+month <- round(month)
+
+#### 데이터병합
+final <- cbind(final,month)
+
+#### NA 결측치 제거
+which(final$survival_time %in% NA)          #### 97 396번째      
+
+#### NA 결측치 제거
+final1 <- final[-c(97,396),]                
+
+final_1 <- final1[final1$month <= 60,]
+
+#### 그래프 그리기
+library(survival)
+library(survminer)
+
+final_1$group3 <- as.character(final_1$group3)
+final_1$status <- as.numeric(final_1$status)
+
+#### model 생성
+fit1 <- survfit(Surv(event = status, time = month) ~ group3, data = final_1)
+
+summary(fit1)
+plot(fit1)
+
+ggsurvplot(fit1)
+
+ggsurv <- ggsurvplot(fit1,pval=TRUE, risk.table=TRUE,pval.size=10,
+                   #title="Kaplan-Meier Curve for BMI  Survival",
+                   fontsize=10,
+                   censor.size=7,
+                   legend.labs=c("N0", "N1","N2"), legend.title="Lymph_node",
+                   font.legend= c(20, "bold", "black"),
+                   ggtheme = theme_bw(),
+                   xlab = "Time",
+                   font.main = c(20, "bold", "black"),
+                   font.x = c(20, "bold", "black"),
+                   font.y = c(20, "bold", "black"),
+                   font.tickslab = c(10, "plain", "black"),
+                   risk.table.height=.20,
+)
+ggsurv
+
+
+ggsurv$table <- ggrisktable(fit1, 
+                            data = fit1, 
+                            color = "strata", 
+                            y.text = T,   ylab = "",  xlab = "Time",
+                            #tables.theme = theme_cleantable(),
+                            fontsize=7,
+                            legend.labs=c("High", "Low"),
+                            font.tickslab = c(20, "bold"),
+                            font.title = list(size = 20, color = "black", face = "bold"))
+
+ggsurv
+
+
+ggsurv$plot <- ggsurv$plot + 
+  theme(legend.title = element_text(size = 18, color = "black", face = "bold"),
+        legend.text = element_text(size = 18, color = "black", face = "bold"),
+        axis.text.x = element_text(size = 20, color = "black", face = "plain"),
+        axis.text.y = element_text(size = 20, color = "black", face = "plain"),
+        axis.title.x = element_text(size = 20, color = "black", face = "plain"),
+        axis.title.y = element_text(size = 20, color = "black", face = "plain"))
+ggsurv
+
+
+ggsurv$table <- ggsurv$table + 
+  theme(axis.title.x = element_text(size = 20, color = "black", face = "plain"),
+        axis.title.y = element_text(size = 20, color = "black", face = "plain"))
+
+ggsurv
+
+
+clinical_backup <- clinical
+
+#### 데이터 저장
+write.csv(final, file='/home/gyw2626/final.csv')
+
+
+####
+#### 유전자별 생존분석
+DF_core_gene          #### expression data
+final                 #### 최종 data
+
+#### 중간값 구하기(119)
+median(DF_core_gene$SYT1) 
+
+#### 중간값 기준으로 높으면 high 아니면 low           
+genes <- mutate(DF_core_gene,g_SYT1=ifelse(DF_core_gene$SYT1 >= 119,"high","low"))      
+
+#### 전체 데이터의 median 값 계산
+apply(DF_core_gene[,c(1:38)],2,median)
+
+#### median값 기준으로 high, low data frame 생성
+genes <- mutate(genes,g_SCT1=ifelse(DF_core_gene$SCT >= 9,"high","low"))
+genes <- mutate(genes,g_WNT11=ifelse(DF_core_gene$WNT11 >= 270.5,"high","low"))  
+genes <- mutate(genes,g_NOS1=ifelse(DF_core_gene$NOS1 >= 4,"high","low"))  
+genes <- mutate(genes,g_COL9A3=ifelse(DF_core_gene$COL9A3 >= 294.5,"high","low"))  
+genes <- mutate(genes,g_STMN2=ifelse(DF_core_gene$STMN2 >= 35.5,"high","low"))  
+genes <- mutate(genes,g_COMP=ifelse(DF_core_gene$COMP >= 178,"high","low"))   
+genes <- mutate(genes,g_SFRP4=ifelse(DF_core_gene$SFRP4 >= 551,"high","low"))  
+genes <- mutate(genes,g_ASPN=ifelse(DF_core_gene$ASPN >= 273,"high","low"))  
+genes <- mutate(genes,g_DKK1=ifelse(DF_core_gene$DKK1 >= 11,"high","low"))  
+genes <- mutate(genes,g_COL9A1=ifelse(DF_core_gene$COL9A1 >= 76.5,"high","low"))  
+genes <- mutate(genes,g_TNNT2=ifelse(DF_core_gene$TNNT2 >= 22,"high","low"))  
+genes <- mutate(genes,g_AVPR2=ifelse(DF_core_gene$AVPR2 >= 11,"high","low"))  
+genes <- mutate(genes,g_GNGT1=ifelse(DF_core_gene$GNGT1 >= 6,"high","low"))  
+genes <- mutate(genes,g_CNN1=ifelse(DF_core_gene$CNN1 >= 507.5,"high","low"))  
+genes <- mutate(genes,g_GFAP=ifelse(DF_core_gene$GFAP >= 5,"high","low"))  
+genes <- mutate(genes,g_MYH11=ifelse(DF_core_gene$MYH11 >= 1739,"high","low"))  
+genes <- mutate(genes,g_NGF=ifelse(DF_core_gene$NGF >= 6,"high","low"))  
+genes <- mutate(genes,g_WNT10A=ifelse(DF_core_gene$WNT10A >= 49.5,"high","low"))  
+genes <- mutate(genes,g_COL2A1=ifelse(DF_core_gene$COL2A1 >= 9,"high","low"))  
+genes <- mutate(genes,g_ADCYAP1=ifelse(DF_core_gene$ADCYAP1 >= 12,"high","low"))  
+genes <- mutate(genes,g_RSPO2=ifelse(DF_core_gene$RSPO2 >= 7,"high","low"))
+genes <- mutate(genes,g_TAGLN=ifelse(DF_core_gene$TAGLN >= 3768.5,"high","low"))
+genes <- mutate(genes,g_JPH2=ifelse(DF_core_gene$JPH2 >= 70,"high","low"))
+genes <- mutate(genes,g_UCHL1=ifelse(DF_core_gene$UCHL1 >= 73,"high","low"))
+genes <- mutate(genes,g_DKK2=ifelse(DF_core_gene$DKK2 >= 56.5,"high","low"))
+genes <- mutate(genes,g_WIF1=ifelse(DF_core_gene$WIF1 >= 4,"high","low"))
+genes <- mutate(genes,g_ACTC1=ifelse(DF_core_gene$ACTC1 >= 18,"high","low"))
+genes <- mutate(genes,g_ACTG2=ifelse(DF_core_gene$ACTG2 >= 1258,"high","low"))
+genes <- mutate(genes,g_LMOD1=ifelse(DF_core_gene$LMOD1 >= 307.5,"high","low"))
+genes <- mutate(genes,g_GNG4=ifelse(DF_core_gene$GNG4 >= 658.5,"high","low"))
+genes <- mutate(genes,g_KISS1=ifelse(DF_core_gene$KISS1 >= 17,"high","low"))
+genes <- mutate(genes,g_GAP43=ifelse(DF_core_gene$GAP43 >= 9,"high","low"))
+genes <- mutate(genes,g_CALB2=ifelse(DF_core_gene$CALB2 >= 31,"high","low"))
+genes <- mutate(genes,g_ADCY5=ifelse(DF_core_gene$ADCY5 >= 80,"high","low"))
+genes <- mutate(genes,g_TH=ifelse(DF_core_gene$TH >= 21,"high","low"))
+genes <- mutate(genes,g_OPCML=ifelse(DF_core_gene$OPCML >= 8,"high","low"))
+genes <- mutate(genes,g_SCN5A=ifelse(DF_core_gene$SCN5A >= 13,"high","low"))
+
+#### high, low data만 파싱
+genes1 <- genes
+genes1 <- genes[,-c(1:39)]
+
+write.csv(genes1, file='/home/gyw2626/genes1.csv')              
+
+####
+genes2 <- read.csv(file="/home/gyw2626/genes1.csv",header = T)
+rownames(genes2) <- genes2$X
+#### genes2 <- genes2[,-1]
+
+#### 유전자 데이터 최종병합
+#### 두 가지 데이터프레임을 하나로 병합 (중복 발생)
+final2 <- merge(final,genes2,by.x='patient',by.y='X',all=F) 
+which(final2$survival_time %in% NA)  
+final2 <- final2[-c(97,396),] 
+
+#### 그래프 그리기
+library(survival)
+
+final3 <- final2[final2$month <= 60,]
+
+fit2 <- survfit(Surv(event = status, time = month) ~ final3$g_SCT1, data = final3)
+
+summary(fit2)
+plot(fit2)
+
+ggsurvplot(fit2)
+
+ggsurv <- ggsurvplot(fit2,pval=TRUE, risk.table=TRUE,pval.size=10,
+                     #title="Kaplan-Meier Curve for BMI  Survival",
+                     fontsize=10,
+                     censor.size=7,
+                     legend.labs=c("high", "low"), legend.title="gene",
+                     font.legend= c(20, "bold", "black"),
+                     ggtheme = theme_bw(),
+                     xlab = "Time",
+                     font.main = c(20, "bold", "black"),
+                     font.x = c(20, "bold", "black"),
+                     font.y = c(20, "bold", "black"),
+                     font.tickslab = c(10, "plain", "black"),
+                     risk.table.height=.20,
+)
+ggsurv
