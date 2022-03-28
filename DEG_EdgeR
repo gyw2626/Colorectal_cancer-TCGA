@@ -1,0 +1,548 @@
+#### 만약 데이터 날아갈 시 생존분석시 사용했던 final data 가져오기
+write.csv(final, file = '/home/gyw2626/colorectal cancer/final.csv')
+final <- read.csv(file = '/home/gyw2626/colorectal cancer/final.csv', header = T)
+
+#### final data에서 환자 바코드 기준으로 중복 행 제거
+final3 <- final[!duplicated(final$patient),]   #### 476 -> 454
+which(duplicated(final$patient))
+
+#### expression data에서 환자 n수 맞춰주기
+fd <- t(df)
+fd <- as.data.frame(fd)
+
+zzz <- which(colnames(df) %in% final3$barcode)
+fd1 <- df[,zzz]
+
+View(fd1)
+
+#### group data 만들기
+zzzz <- which(clinical_data$barcode %in% final3$barcode)
+clinic <- clinical_data[zzzz,]
+
+group = factor(clinic$ajcc_pathologic_n)
+group = relevel(group, ref="N0")
+
+#### 결측치 확인 후 제거 (없으므로 생략)
+#which(group %in% NA)             
+#group = group[-c(120,351)]
+
+####
+group = factor(ifelse(group=="N0","N0","N1"))
+
+
+#### DEG
+library(edgeR)
+x <- DGEList(counts = fd1, group = factor(group)) 
+
+table(rowSums(x$counts==0)==312)
+dim(x)
+
+#### low level gene 필터링
+keep.exprs <- filterByExpr(x, group=group)          
+x <- x[keep.exprs,, keep.lib.sizes=FALSE]             
+dim(x)
+
+#### normalization
+x <- calcNormFactors(x, method = "TMM")             
+x$samples$norm.factors
+
+group1 <- ordered(group, levels=c("N0","N1"))
+
+#### 데이터 메트릭스 제작
+design <- model.matrix(~0+group1)
+colnames(design) <- c("N0","N1")
+contr.matrix <- makeContrasts(
+  N1vsCtrl = N1-N0, 
+  levels = design)
+contr.matrix
+
+#### voom 사용
+par(mfrow=c(1,2))
+v <- voom(x, design, plot=TRUE)
+v
+
+#### plot들을 활용한 확인
+vfit <- lmFit(v, design)
+vfit <- contrasts.fit(vfit, contrasts=contr.matrix)
+efit <- eBayes(vfit)
+plotSA(efit, main="Final model: Mean-variance trend")
+
+?topTable
+topGenes <- topTable(efit, number = Inf, adjust.method="BH")
+
+View(topGenes)
+topGenes1 <- topGenes
+
+#### 앙상블 심볼로 변환
+eg1 = bitr(rownames(topGenes), fromType="ENSEMBL", toType="SYMBOL", OrgDb= "org.Hs.eg.db") #### 앙상블 아이디를 심볼로 변환
+colnames(eg1) <- c("ENSEMBL", "Gene")                                                      #### 열이름 변경 *발현값데이터프레임에 있는 열이름이랑 매칭 
+topGenes$ENSEMBL <- rownames(topGenes)
+head(eg1)
+head(topGenes)
+result <- merge(topGenes,eg1,by="ENSEMBL") #ENSEMBL_GENEID 열 기준으로 통합
+
+####
+head(result)
+
+#### 히스토그램 확인
+hist(result$P.Value)
+hist(result$adj.P.Val)
+
+#### up, down 확인
+up_res2 <-result[result$adj.P.Val < 0.05 & result$logFC > 0.5,]      #247
+down_res2 <-result[result$adj.P.Val < 0.05 & result$logFC < -0.5,]   #49
+
+nrow(up_res2)
+nrow(down_res2)
+
+up_res2 <- up_res2[order(-up_res2$logFC),]         #### 내림차순 정렬
+down_res2 <- down_res2[order(down_res2$logFC),]    #### 오름차순 정렬
+
+rownames(up_res2) <- NULL 
+#### .csv 저장
+write.csv(result, file='/home/gyw2626/result.csv')
+write.csv(up_res2, file='/home/gyw2626/result_up.csv')
+write.csv(down_res2, file='/home/gyw2626/result_down.csv')
+
+#여기까지 N0 vs N1(N1+N2) 분석
+
+
+
+###################################################################################################################################
+#### N0 vs N1
+#### Lymph-node status에 따른 데이터프레임 형성
+#### group data 만들기
+data@colData$patient
+group0 = factor(clinic$ajcc_pathologic_n)
+length(group0)
+group0 <- gsub("N1c","N1",group0)
+group0 <- gsub("N2c","N2",group0) 
+
+#### N2값 제거 
+non <- which(group0 %in% "N2")
+group0 <- group0[-non]
+fd0 <- fd1[-non]
+
+####
+fd0     ### expression_data
+clinic  ### meta_data
+
+ncol(fd0)
+length(group0)    ### 372
+
+#### DEG
+library(edgeR)
+x0 <- DGEList(counts = fd0, group = factor(group0)) 
+
+table(rowSums(x0$counts==0)==260)  #0.7 기준 58개 - 진행 안함 
+
+#### zero data 제거
+#zero <- which(rowSums(x1$counts==0)>= 135)                   ###### 위 조건으로 카운팅된 값들의 위치를 zero 변수로 저장
+#x1$counts <- x1$counts[-zero,]                               ####### zero 변수를 삭제하고 나머지 값들만 저장
+dim(x0)                                                       ######### zero 제거 안할 경우 56602 372
+
+#### low level gene 필터링
+keep.exprs0 <- filterByExpr(x0, group=group0)                 
+x0 <- x0[keep.exprs0,, keep.lib.sizes=FALSE]             
+dim(x0)                                                       ### 20878 372
+
+#### normalization
+x0 <- calcNormFactors(x0, method = "TMM")                     
+x0$samples$norm.factors
+
+group0 <- ordered(group0, levels=c("N0","N1"))
+
+#### 데이터 메트릭스 제작
+design0 <- model.matrix(~0+group0)
+colnames(design0) <- c("N0","N1")
+contr.matrix0 <- makeContrasts(
+  N1vsCtrl = N1-N0, 
+  levels = design0)
+contr.matrix0
+
+#### voom 사용
+par(mfrow=c(1,2))
+v0 <- voom(x0, design0, plot=TRUE)
+v0
+
+#### plot들을 활용한 확인
+vfit0 <- lmFit(v0, design0)
+vfit0 <- contrasts.fit(vfit0, contrasts=contr.matrix0)
+efit0 <- eBayes(vfit0)
+plotSA(efit0, main="Final model: Mean-variance trend")
+
+topGenes0 <- topTable(efit0, number = Inf, adjust.method="BH")
+
+View(topGenes0)
+
+#### 앙상블 심볼로 변환
+eg0 = bitr(rownames(topGenes0), fromType="ENSEMBL", toType="SYMBOL", OrgDb= "org.Hs.eg.db") # 앙상블 아이디를 심볼로 변환
+colnames(eg0) <- c("ENSEMBL", "Gene") #열이름 변경 *발현값데이터프레임에 있는 열이름이랑 매칭 
+topGenes0$ENSEMBL <- rownames(topGenes0)
+head(eg0)
+head(topGenes0)
+result0 <- merge(topGenes0,eg0,by="ENSEMBL") #ENSEMBL_GENEID 열 기준으로 통합
+
+####
+head(result0)
+
+#### 히스토그램 확인
+hist(result0$P.Value)
+hist(result0$adj.P.Val)
+
+#### up, down 구분
+up_res0 <- result0[result0$P.Value < 0.05 & result0$logFC > 0.5,]      # 288
+down_res0 <- result0[result0$P.Value < 0.05 & result0$logFC < -0.5,]   # 71
+
+nrow(up_res0)
+nrow(down_res0)
+
+#### .csv 저장
+write.csv(result0, file='/home/gyw2626/result0.csv')
+write.csv(up_res0, file='/home/gyw2626/result_up0.csv')
+write.csv(down_res0, file='/home/gyw2626/result_down0.csv')
+
+
+
+
+
+
+########################################################
+#### N1 vs N2
+#### Lymph-node status에 따른 데이터프레임 형성
+#### group data 만들기
+data@colData$patient
+group3 = factor(clinic$ajcc_pathologic_n)
+length(group3)
+group3 <- gsub("N1c","N1",group3)
+group3 <- gsub("N2c","N2",group3) 
+
+#### N0값 제거 
+non <- which(group3 %in% "N0")
+group3 <- group3[-non]
+fd2 <- fd1[-non]
+
+####
+fd2 ### expression_data
+clinic ### meta_data
+
+ncol(fd2)
+length(group3)
+
+#### DEG 
+library(edgeR)
+x1 <- DGEList(counts = fd2, group = factor(group3)) 
+
+table(rowSums(x1$counts==0)==131)  #0.7 기준 130개 - 진행 안함 
+
+#### zero count 제거
+#zero <- which(rowSums(x1$counts==0)>= 135)                   #### 위 조건으로 카운팅된 값들의 위치를 zero 변수로 저장
+#x1$counts <- x1$counts[-zero,]                               #### zero 변수를 삭제하고 나머지 값들만 저장
+dim(x1)                                                       #### zero 제거 안할 경우 56602 187
+
+#### low level gene 필터링
+keep.exprs1 <- filterByExpr(x1, group=group3)                 
+x1 <- x1[keep.exprs1,, keep.lib.sizes=FALSE]             
+dim(x1)                                                       ### 19828 187
+
+#### normalization
+x1 <- calcNormFactors(x1, method = "TMM")                     
+x1$samples$norm.factors
+
+group4 <- ordered(group3, levels=c("N1","N2"))
+
+#### 데이터 메트릭스 제작
+design1 <- model.matrix(~0+group4)
+colnames(design1) <- c("N1","N2")
+contr.matrix1 <- makeContrasts(
+  N2vsCtrl = N2-N1, 
+  levels = design1)
+contr.matrix1
+
+#### voom 사용
+par(mfrow=c(1,2))
+v1 <- voom(x1, design1, plot=TRUE)
+v1
+
+#### plot들을 활용한 확인
+vfit1 <- lmFit(v1, design1)
+vfit1 <- contrasts.fit(vfit1, contrasts=contr.matrix1)
+efit1 <- eBayes(vfit1)
+plotSA(efit1, main="Final model: Mean-variance trend")
+
+topGenes1 <- topTable(efit1, number = Inf, adjust.method="BH")
+
+View(topGenes1)
+
+#### 앙상블 심볼로 변환
+eg2 = bitr(rownames(topGenes1), fromType="ENSEMBL", toType="SYMBOL", OrgDb= "org.Hs.eg.db") # 앙상블 아이디를 심볼로 변환
+colnames(eg2) <- c("ENSEMBL", "Gene") #열이름 변경 *발현값데이터프레임에 있는 열이름이랑 매칭 
+topGenes1$ENSEMBL <- rownames(topGenes1)
+head(eg2)
+head(topGenes1)
+result1 <- merge(topGenes1,eg2,by="ENSEMBL") #ENSEMBL_GENEID 열 기준으로 통합
+
+####
+head(result1)
+
+#### 히스토그램 확인
+hist(result1$P.Value)
+hist(result1$adj.P.Val)
+
+#### up, down 구분
+up_res4 <-result1[result1$P.Value < 0.05 & result1$logFC > 0.5,]      # 163
+down_res4 <-result1[result1$P.Value < 0.05 & result1$logFC < -0.5,]   # 85
+
+nrow(up_res4)
+nrow(down_res4)
+
+#### .csv 저장
+write.csv(result1, file='/home/gyw2626/result1.csv')
+write.csv(up_res4, file='/home/gyw2626/result_up1.csv')
+write.csv(down_res4, file='/home/gyw2626/result_down1.csv')
+
+
+
+
+
+
+
+
+####################################################################
+#### N0 vs N2
+group99 = factor(clinic$ajcc_pathologic_n)
+length(group99)
+group99 <- gsub("N1c","N1",group99)
+group99 <- gsub("N2c","N2",group99) 
+
+#### N1값 제거 
+non <- which(group99 %in% "N1")
+group99 <- group99[-non]
+fd3 <- fd1[-non]
+
+####
+fd3        ### expression_data
+clinic     ### meta_data
+
+ncol(fd3)
+length(group99)
+
+#### DEG
+library(edgeR)
+x2 <- DGEList(counts = fd3, group = factor(group99)) 
+
+table(rowSums(x2$counts==0)==245)  #0.7 기준 57개 - 진행 안함 
+
+#### zero count 제거
+#zero <- which(rowSums(x1$counts==0)>= 135)                   ###### 위 조건으로 카운팅된 값들의 위치를 zero 변수로 저장
+#x1$counts <- x1$counts[-zero,]                               ###### zero 변수를 삭제하고 나머지 값들만 저장
+dim(x2)                                                       ###### zero 제거 안할 경우 56602 349
+
+###### low level gene 필터링
+keep.exprs2 <- filterByExpr(x2, group=group99)                
+x2 <- x2[keep.exprs2,, keep.lib.sizes=FALSE]             
+dim(x2)                                                       ###### 21453 349
+
+###### normalization
+x2 <- calcNormFactors(x2, method = "TMM")                     
+x2$samples$norm.factors
+
+group99 <- ordered(group99, levels=c("N0","N2"))
+
+#### 데이터 메트릭스 제작
+design2 <- model.matrix(~0+group99)
+colnames(design2) <- c("N0","N2")
+contr.matrix2 <- makeContrasts(
+  N2vsCtrl = N2-N0, 
+  levels = design2)
+contr.matrix2
+
+#### voom 사용
+par(mfrow=c(1,2))
+v2 <- voom(x2, design2, plot=TRUE)
+v2
+
+#### plot들을 활용한 확인
+vfit2 <- lmFit(v2, design2)
+vfit2 <- contrasts.fit(vfit2, contrasts=contr.matrix2)
+efit2 <- eBayes(vfit2)
+plotSA(efit2, main="Final model: Mean-variance trend")
+
+topGenes2 <- topTable(efit2, number = Inf, adjust.method="BH")
+
+View(topGenes2)
+
+#### 앙상블 심볼로 변환
+eg3 = bitr(rownames(topGenes2), fromType="ENSEMBL", toType="SYMBOL", OrgDb= "org.Hs.eg.db") # 앙상블 아이디를 심볼로 변환
+colnames(eg3) <- c("ENSEMBL", "Gene") #열이름 변경 *발현값데이터프레임에 있는 열이름이랑 매칭 
+topGenes2$ENSEMBL <- rownames(topGenes2)
+head(eg3)
+head(topGenes2)
+result2 <- merge(topGenes2,eg3,by="ENSEMBL") #ENSEMBL_GENEID 열 기준으로 통합
+
+####
+head(result2)
+
+#### 히스토그램 확인
+hist(result2$P.Value)
+hist(result2$adj.P.Val)
+
+#### up, down 구분
+up_res6 <- result2[result2$adj.P.Val < 0.05 & result2$logFC > 0.5,]      # 163
+down_res6 <- result2[result2$adj.P.Val < 0.05 & result2$logFC < -0.5,]   # 85
+
+nrow(up_res6)
+nrow(down_res6)
+
+#### .csv 저장
+write.csv(result2, file='/home/gyw2626/result2.csv')
+write.csv(up_res6, file='/home/gyw2626/result_up2.csv')
+write.csv(down_res6, file='/home/gyw2626/result_down2.csv')
+
+
+
+
+
+
+
+#######################################################
+#### expression data에서 환자 n수 맞춰주기
+fd <- fd1
+
+gene_id <- data@rowRanges[,c(1,2)]
+fd$gene <- gene_id$external_gene_name
+
+View(fd)
+c <- fd
+
+dup <- which(c$gene %in% c("DKK2", "OPCML", "UCHL1"
+                                 ,"MYH11"
+                                 ,"COMP"
+                                 ,"ADCYAP1"
+                                 ,"CDKN2A"
+                                 ,"VIP"
+                                 ,"STMN2"
+                                 ,"DKK1"
+                                 ,"CALB2"
+                                 ,"CAMK2B"
+                                 ,"COL2A1"
+                                 ,"DRD1"
+                                 ,"SYT1"
+                                 ,"GNG4"
+                                 ,"GAP43"
+                                 ,"ACTC1"
+                                 ,"SCN2B"
+                                 ,"TNNT2"
+                                 ,"SFRP4"
+                                 ,"CACNA1I"
+                                 ,"GNGT1"
+                                 ,"BMP7"
+                                 ,"GRIA4"
+                                 ,"KIF1A"
+                                 ,"NGF"
+                                 ,"ACTG2"
+                                 ,"WNT11"
+                                 ,"TH"
+                                 ,"SCN5A"
+                                 ,"NOS1"
+                                 ,"LDB3"
+                                 ,"TNNC2"))
+
+c <- c[dup,]
+View(c)
+
+#### group data
+group5 = factor(clinic$ajcc_pathologic_n)
+length(group5)
+group5 <- gsub("N1c","N1",group5)
+group5 <- gsub("N2c","N2",group5)
+c1 <-group5
+
+#### visualization 
+library(gapminder)
+library(gridExtra)
+
+#### dataframe
+c                                                                 
+rownames(c)<- c$gene
+c <- c[,-ncol(c)]
+DF_core_gene <- t(c)
+rownames(DF_core_gene) <- substr(rownames(DF_core_gene),1,12)    #### 12자리 barcode로 이름 설정
+DF_core_gene <- as.data.frame(DF_core_gene)
+
+DF_core_gene$group <- c1
+View(DF_core_gene)
+
+####
+exp <- c(DF_core_gene[,1],DF_core_gene[,2],DF_core_gene[,3],DF_core_gene[,4],DF_core_gene[,5],DF_core_gene[,6],DF_core_gene[,7],
+         DF_core_gene[,8],DF_core_gene[,9],DF_core_gene[,10],DF_core_gene[,11],DF_core_gene[,12],DF_core_gene[,13],DF_core_gene[,14],
+         DF_core_gene[,15],DF_core_gene[,16],DF_core_gene[,17],DF_core_gene[,18],DF_core_gene[,19],DF_core_gene[,20],DF_core_gene[,21],
+         DF_core_gene[,22],DF_core_gene[,23],DF_core_gene[,24],DF_core_gene[,25],DF_core_gene[,26],DF_core_gene[,27],DF_core_gene[,28],
+         DF_core_gene[,29],DF_core_gene[,30],DF_core_gene[,31],DF_core_gene[,32],DF_core_gene[,33],DF_core_gene[,34])
+
+gene <- rep(colnames(DF_core_gene)[1:34],each=454)
+group6 <- rep(DF_core_gene$group,34)
+
+length(exp)
+length(gene)
+length(group6)
+
+box_df <- data.frame(exp,group6,gene)
+454 *2
+test <- box_df[c(455:908),]
+
+#######################################
+#### box plot
+library(ggplot2)
+library(gridExtra)
+library(gapminder)
+library(dplyr)
+library(ggpubr)
+install.packages("ggpubr")
+
+
+p3 <- ggplot(test, aes(x = group6, y = exp, fill = group6)) +
+  geom_boxplot() +
+  facet_wrap(~gene) +
+  scale_y_continuous(name = "Average Life Expectancy") +
+  scale_x_discrete(labels = abbreviate, name = "Continent")
+
+
+my_comparisons <- list( c("N0", "N1"), c("N1", "N2"), c("N0", "N2") )
+
+ggboxplot(test, x = "group6", y = "exp",
+          color = "group6", palette = "jco")+ 
+  stat_compare_means(comparisons = my_comparisons, label.y = c(15000, 16500, 19000))+
+  stat_compare_means(label.y = 25000)
+
+# Pairwise comparison against reference
+compare_means(exp ~ group6,  data = test, ref.group = "N0",
+              method = "t.test")
+
+test
+
+p <- ggboxplot(test, x = "group6", y = "exp",
+               color = "group6", palette = "jco",
+               add = "jitter",
+               facet.by = "gene",scales = "free_y", short.panel.labs = FALSE)
+
+# Use only p.format as label. Remove method name.
+p + stat_compare_means(comparisons = my_comparisons)
+
+#### 원하는 유전자 
+which(box_df$gene == "TH")
+COMP
+test <- box_df[c(14529:14982),]
+
+test <- box_df[c(1:454),]
+test <- box_df[454*2+1:454*3,]
+test <- box_df[454*3+1:454*4,]
+test <- box_df[454*4+1:454*5,]
+test <- box_df[454*5+1:454*6,]
+test <- box_df[454*6+1:454*7,]
+test <- box_df[454*7+1:454*8,]
+test <- box_df[454*8+1:454*9,]
+
+test
+
+p3+ylim(0,500)
