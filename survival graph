@@ -1,0 +1,230 @@
+nrow(up_res2) # 0 vs 1
+nrow(up_res4) # 1 vs 2
+nrow(up_res6) # 0 vs 2 
+
+#### node status levels의 차이와는 상관없이 림프절 전이에 영향을 주는 유전자
+common_node_genes <- up_res2[which(up_res2$Gene %in% up_res6$Gene),]          
+N1_node_genes <- up_res2[-which(up_res2$Gene %in% common_node_genes$Gene),]
+
+write.csv(N1_node_genes, file='/home/gyw2626/N1_node.csv')
+
+
+#### 다른 생존 데이터로 생존 분석 
+#### 생존 데이터 load
+xena <- read.csv(file = "./생존데이터.csv", header = T)
+
+final6 <- merge(final3,xena,by="patient") 
+
+####
+which(final6$OS.time %in% NA)
+final6 <- final6[-75,]  
+
+fit2 <- survfit(Surv(event = OS, time = OS.time) ~ group3, data = final6)
+
+summary(fit2)
+plot(fit2)
+
+ggsurvplot(fit2)
+
+#### 전체데이터 생존그래프
+ggsurv <- ggsurvplot(fit2,pval=TRUE, risk.table=FALSE,pval.size=10,
+                     #title="Kaplan-Meier Curve for BMI  Survival",
+                     fontsize=10,
+                     censor.size=7,
+                     legend.labs=c("N0", "N1","N2"), legend.title="Lymph_node",
+                     palette=c("dodgerblue2","green","red"),
+                     font.legend= c(20, "bold", "black"),
+                     ggtheme = theme_bw(),
+                     xlab = "Time(days)",
+                     font.main = c(20, "bold", "black"),
+                     font.x = c(20, "bold", "black"),
+                     font.y = c(20, "bold", "black"),
+                     font.tickslab = c(10, "plain", "black"),
+)
+ggsurv
+
+
+ggsurv$plot <- ggsurv$plot + 
+  theme(legend.title = element_text(size = 23, color = "black", face = "bold"),
+        legend.text = element_text(size = 23, color = "black", face = "bold"),
+        axis.text.x = element_text(size = 25, color = "black", face = "plain"),
+        axis.text.y = element_text(size = 25, color = "black", face = "plain"),
+        axis.title.x = element_text(size = 25, color = "black", face = "plain"),
+        axis.title.y = element_text(size = 25, color = "black", face = "plain"))
+ggsurv
+
+
+#### 사진저장
+ggsave(filename ='colorectal cancer/TEST.png',
+       device = 'png',
+       dpi = 1200,
+       width= 15000,
+       height = 12000,
+       units = "px"
+)
+
+
+
+#####################################
+#### 다른 생존 데이터로 생존 분석 #####
+#### 생존 데이터 load
+final7 <- final6 
+
+final7$group3
+one <- which(final7$group3 %in% "N2")
+final7 <- final7[-one,]
+
+####
+fit3 <- survfit(Surv(event = OS, time = OS.time) ~ group3, data = final7)
+
+summary(fit3)
+plot(fit3)
+
+ggsurvplot(fit3)
+
+#### N0 vs N1 생존그래프
+ggsurv <- ggsurvplot(fit3,pval=TRUE, risk.table=FALSE,pval.size=10,
+                     #title="Kaplan-Meier Curve for BMI  Survival",
+                     fontsize=10,
+                     censor.size=7,
+                     legend.labs=c("N0", "N1"), legend.title="Lymph_node",
+                     palette=c("dodgerblue2","red"),
+                     font.legend= c(20, "bold", "black"),
+                     ggtheme = theme_bw(),
+                     xlab = "Time(days)",
+                     font.main = c(20, "bold", "black"),
+                     font.x = c(20, "bold", "black"),
+                     font.y = c(20, "bold", "black"),
+                     font.tickslab = c(10, "plain", "black"),
+)
+ggsurv
+
+
+ggsurv$plot <- ggsurv$plot + 
+  theme(legend.title = element_text(size = 23, color = "black", face = "bold"),
+        legend.text = element_text(size = 23, color = "black", face = "bold"),
+        axis.text.x = element_text(size = 25, color = "black", face = "plain"),
+        axis.text.y = element_text(size = 25, color = "black", face = "plain"),
+        axis.title.x = element_text(size = 25, color = "black", face = "plain"),
+        axis.title.y = element_text(size = 25, color = "black", face = "plain"))
+ggsurv
+
+
+#### 사진저장
+ggsave(filename ='colorectal cancer/TEST.png',
+       device = 'png',
+       dpi = 1200,
+       width= 15000,
+       height = 12000,
+       units = "px"
+)
+
+
+####################
+#### 생존 데이터 load
+final8 <- final6 
+
+final8$group3
+two <- which(final8$group3 %in% "N0")
+final8 <- final8[-two,]
+
+####
+fit4 <- survfit(Surv(event = OS, time = OS.time) ~ group3, data = final8)
+
+summary(fit4)
+plot(fit4)
+
+ggsurvplot(fit4)
+
+#### N1 vs N2 생존그래프
+ggsurv <- ggsurvplot(fit4,pval=TRUE, risk.table=FALSE,pval.size=10,
+                     #title="Kaplan-Meier Curve for BMI  Survival",
+                     fontsize=10,
+                     censor.size=7,
+                     legend.labs=c("N1", "N2"), legend.title="Lymph_node",
+                     palette=c("dodgerblue2","red"),
+                     font.legend= c(20, "bold", "black"),
+                     ggtheme = theme_bw(),
+                     xlab = "Time(days)",
+                     font.main = c(20, "bold", "black"),
+                     font.x = c(20, "bold", "black"),
+                     font.y = c(20, "bold", "black"),
+                     font.tickslab = c(10, "plain", "black"),
+)
+ggsurv
+
+
+ggsurv$plot <- ggsurv$plot + 
+  theme(legend.title = element_text(size = 23, color = "black", face = "bold"),
+        legend.text = element_text(size = 23, color = "black", face = "bold"),
+        axis.text.x = element_text(size = 25, color = "black", face = "plain"),
+        axis.text.y = element_text(size = 25, color = "black", face = "plain"),
+        axis.title.x = element_text(size = 25, color = "black", face = "plain"),
+        axis.title.y = element_text(size = 25, color = "black", face = "plain"))
+ggsurv
+
+
+#### 사진 저장
+ggsave(filename ='colorectal cancer/TEST.png',
+       device = 'png',
+       dpi = 1200,
+       width= 15000,
+       height = 12000,
+       units = "px"
+)
+
+
+
+####################
+#### 생존 데이터 load
+final9 <- final6 
+
+final9$group3
+three <- which(final9$group3 %in% "N1")
+final9 <- final9[-three,]
+
+####
+
+fit5 <- survfit(Surv(event = OS, time = OS.time) ~ group3, data = final9)
+
+summary(fit5)
+plot(fit5)
+
+ggsurvplot(fit5)
+
+#### N0 vs N2 생존그래프
+ggsurv <- ggsurvplot(fit5,pval=TRUE, risk.table=FALSE,pval.size=10,
+                     #title="Kaplan-Meier Curve for BMI  Survival",
+                     fontsize=10,
+                     censor.size=7,
+                     legend.labs=c("N0", "N2"), legend.title="Lymph_node",
+                     palette=c("dodgerblue2","red"),
+                     font.legend= c(20, "bold", "black"),
+                     ggtheme = theme_bw(),
+                     xlab = "Time(days)",
+                     font.main = c(20, "bold", "black"),
+                     font.x = c(20, "bold", "black"),
+                     font.y = c(20, "bold", "black"),
+                     font.tickslab = c(10, "plain", "black"),
+)
+ggsurv
+
+
+ggsurv$plot <- ggsurv$plot + 
+  theme(legend.title = element_text(size = 23, color = "black", face = "bold"),
+        legend.text = element_text(size = 23, color = "black", face = "bold"),
+        axis.text.x = element_text(size = 25, color = "black", face = "plain"),
+        axis.text.y = element_text(size = 25, color = "black", face = "plain"),
+        axis.title.x = element_text(size = 25, color = "black", face = "plain"),
+        axis.title.y = element_text(size = 25, color = "black", face = "plain"))
+ggsurv
+
+
+#### 
+ggsave(filename ='colorectal cancer/TEST.png',
+       device = 'png',
+       dpi = 1200,
+       width= 15000,
+       height = 12000,
+       units = "px"
+)
