@@ -1,0 +1,199 @@
+library(TCGAbiolinks)
+library(DT)
+library(SummarizedExperiment)
+
+
+#### tumor type 지정 안할 경우 primary와 재발, normal tumor까지 모두 포함되어 중복값 제거할 시 랜덤으로 선택하게 되면 결과값에 지대한 영향을 미칠 수 있음
+query.exp <- GDCquery(
+  project = "TCGA-COAD",
+  data.category = "Transcriptome Profiling",
+  data.type = "Gene Expression Quantification", 
+  workflow.type = "HTSeq - Counts",
+  sample.type = "Primary Tumor")
+
+####
+GDCdownload(query.exp)
+data <- GDCprepare(query.exp)
+
+####
+data@colData
+q <- colData(data)
+q <- as.data.frame(rowRanges(data))
+q <- as.data.frame(q)
+View(q)
+
+#### 다운받은 TCGA데이터에서 발현값 뽑아오기 
+DF_colorectal <- assay(data)
+df <- assay(data)
+df <- as.data.frame(df)
+table(DF_colorectal$ENSEMBL==T)               ####앙상블 ID 중복이 없음으로 그냥 진행
+
+#### 앙상블 및 유전자 심볼 찾기  
+#### 마지막열에 gene column 추가
+gene_id <- data@rowRanges[,c(1,2)]
+df$gene <- gene_id$external_gene_name
+
+#### gene name을 rownames로 지정
+rownames(df) <- df$gene
+df <- df[,-ncol(df)]
+
+#### 중복제거된 데이터프레임을 원할 경우 진행
+test <- assay(data)
+test <- as.data.frame(test)
+test <- df[!duplicated(df$gene),]
+
+rownames(test) <- test$gene
+################################################ 본 분석에서는 여기까지 생략
+
+####
+DF_coldata <- colData(data)
+DF_coldata <- as.data.frame(DF_coldata)
+
+#### 데이터 확인
+View(DF_coldata)
+elementMetadata(data)
+metadata(data)
+
+####
+DF_colorectal <- as.data.frame(DF_colorectal)
+ncol(DF_colorectal)
+
+#### 유전자이름(앙상블) -> 분석하기 편하게 SYMBOL로 변환  
+BiocManager::install("org.Hs.eg.db")
+BiocManager::install("clusterProfiler")
+library(org.Hs.eg.db)
+library(clusterProfiler)
+keytypes(org.Hs.eg.db)                   # keytype 확인
+
+#### 앙상블이 보통 심볼보다 많기 때문에 매칭이 되지 않는 값이 표현됨
+eg = bitr(rownames(DF_colorectal), fromType="ENSEMBL", toType="SYMBOL", OrgDb="org.Hs.eg.db") #39.39 % 
+
+#### expression dataframe rownames symbol로 변경 
+eg
+colnames(DF_colorectal)
+
+####
+DF_colorectal$ENSEMBL <- rownames(DF_colorectal)
+df_merge <- merge(DF_colorectal,eg, by='ENSEMBL') #앙상블열이 필요없어서 MERGI 함수로 날리는 작업
+df_merge <- df_merge[,-1] # 대괄호에서 ,를 기준으로 행과 열을 나타냄
+df_merge <- aggregate(. ~ SYMBOL, data = df_merge, mean) #중복되는 값을 제거하기 위해 평균값으로 대치
+rownames(df_merge) <- df_merge$SYMBOL
+df_merge <- df_merge[,-1]
+
+View(colData(DF_colorectal))
+
+#### RNA-seq analysis를 위한 Dataframe 형성 
+#### Lymph-node status에 따른 데이터프레임 형성 
+colnames(DF_colorectal) <- substr(colnames(DF_colorectal),1,12)
+
+#### group 설정
+group <- data@colData$ajcc_pathologic_n
+group <- ifelse(group=="N0","N0","N1")
+
+#### lymph node NA 값 찾기 
+which(data@colData$ajcc_pathologic_n %in% NA)
+#### lymph node NA 값 제거 
+group <- group[-c(120,351)]
+df_merge <- df_merge[,-c(120,351)]
+DF_colorectal <- DF_colorectal[,-c(120,351)]
+
+####
+df_merge ### expression_data
+DF_coldata ### meta_data
+
+#### length 확인
+ncol(df_merge)
+length(DF_coldata$ajcc_pathologic_n)
+
+#### DEG
+library(edgeR)
+x <- DGEList(counts = df_merge, group = factor(group)) 
+
+#### xlog가 0이 되는 것을 방지
+#cpm <- cpm(x)                          
+#lcpm <- cpm(x, log=TRUE)
+
+####
+L <- mean(x$samples$lib.size) * 1e-6
+M <- median(x$samples$lib.size) * 1e-6
+c(L, M)
+
+#### zero count 제거
+table(rowSums(x$counts==0)==334)  #0.7 기준 21개 - 생략
+#zero <- which(rowSums(x$counts==0)>= 16)                   #### 위 조건으로 카운팅된 값들의 위치를 zero 변수로 저장
+#x$counts <- x$counts[-zero,]                               #### zero 변수를 삭제하고 나머지 값들만 저장
+dim(x)
+
+#### low level gene 필터링
+keep.exprs <- filterByExpr(x, group=group)          
+x <- x[keep.exprs,, keep.lib.sizes=FALSE]             
+dim(x)
+
+#### normalization
+x <- calcNormFactors(x, method = "TMM")             
+x$samples$norm.factors
+
+####
+group1 <- ordered(group, levels=c("N0","N1"))
+
+#### 데이터 메트릭스 제작
+design <- model.matrix(~0+group1)
+colnames(design) <- c("N0","N1")
+contr.matrix <- makeContrasts(
+  N1vsCtrl = N1-N0, 
+  levels = design)
+contr.matrix1
+
+#### voom 사용
+par(mfrow=c(1,2))
+v <- voom(x, design, plot=TRUE)
+v
+
+#### plot들을 활용한 확인
+vfit <- lmFit(v, design)
+vfit <- contrasts.fit(vfit, contrasts=contr.matrix)
+efit <- eBayes(vfit)
+plotSA(efit, main="Final model: Mean-variance trend")
+
+####
+summary(decideTests(efit, adjust.method = "BH", p.value = 0.05,
+                    lfc = 1))
+####
+plotMD(efit, column=1)
+
+####
+tfit <- treat(vfit, lfc=0)
+dt <- decideTests(tfit)
+summary(dt)
+
+####
+res <- topTable(efit, number=Inf, adjust.method = 'BH')
+res$col <- 'grey'
+up_regulated<-res$col[which(res$logFC>0.5 & res$adj.P.Val<0.05)]  
+res$col[which(res$logFC<(-0.5) & res$adj.P.Val<0.05)]  <- '#0570b0'
+
+####
+library(ggplot2)
+ggplot(data=res, aes(x=logFC, y=-log10(P.Value))) +
+  geom_point(color=res$col) + theme_classic()
+res
+
+#### 히스토그램 확인
+hist(as.matrix(res$P.Value))
+hist(as.matrix(res$adj.P.Val))        #### adj.P.Val의 경우도 정규분포를 따르므로 adj 값 사용
+
+#### up, down 구분
+up_res <-res[res$adj.P.Val < 0.05 & res$logFC > 0.5,]      #308
+down_res <-res[res$adj.P.Val < 0.05 & res$logFC < -0.5,]   #40
+
+####
+nrow(up_res)
+nrow(down_res)
+
+#### .csv 파일로 저장
+write.csv(res, file='/home/gyw2626/result.csv')
+write.csv(up_res, file='/home/gyw2626/result_up.csv')
+write.csv(down_res, file='/home/gyw2626/result_down.csv')
+
+####
+write.csv(df, file='/home/gyw2626/exp.csv')
