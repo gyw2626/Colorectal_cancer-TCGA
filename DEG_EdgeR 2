@@ -89,20 +89,21 @@ hist(result$P.Value)
 hist(result$adj.P.Val)
 
 #### up, down 확인
-up_res2 <-result[result$adj.P.Val < 0.05 & result$logFC > 0.5,]      #247
-down_res2 <-result[result$adj.P.Val < 0.05 & result$logFC < -0.5,]   #49
+up_res0 <-result[result$adj.P.Val < 0.05 & result$logFC > 0.5,]      #247
+down_res0 <-result[result$adj.P.Val < 0.05 & result$logFC < -0.5,]   #49
 
-nrow(up_res2)
-nrow(down_res2)
+nrow(up_res0)
+nrow(down_res0)
 
-up_res2 <- up_res2[order(-up_res2$logFC),]         #### 내림차순 정렬
-down_res2 <- down_res2[order(down_res2$logFC),]    #### 오름차순 정렬
+up_res0 <- up_res0[order(-up_res0$logFC),]         #### 내림차순 정렬
+down_res0 <- down_res0[order(down_res0$logFC),]    #### 오름차순 정렬
 
-rownames(up_res2) <- NULL 
+rownames(up_res0) <- NULL 
+
 #### .csv 저장
 write.csv(result, file='/home/gyw2626/result.csv')
-write.csv(up_res2, file='/home/gyw2626/result_up.csv')
-write.csv(down_res2, file='/home/gyw2626/result_down.csv')
+write.csv(up_res0, file='/home/gyw2626/result_up.csv')
+write.csv(down_res0, file='/home/gyw2626/result_down.csv')
 
 #여기까지 N0 vs N1(N1+N2) 분석
 
@@ -191,15 +192,15 @@ hist(result0$P.Value)
 hist(result0$adj.P.Val)
 
 #### up, down 구분
-up_res0 <- result0[result0$P.Value < 0.05 & result0$logFC > 0.5,]      # 288
-down_res0 <- result0[result0$P.Value < 0.05 & result0$logFC < -0.5,]   # 71
+up_res2 <- result0[result0$P.Value < 0.05 & result0$logFC > 0.5,]      # 288
+down_res2 <- result0[result0$P.Value < 0.05 & result0$logFC < -0.5,]   # 71
 
-nrow(up_res0)
+nrow(up_res2)
 nrow(down_res0)
 
 #### .csv 저장
 write.csv(result0, file='/home/gyw2626/result0.csv')
-write.csv(up_res0, file='/home/gyw2626/result_up0.csv')
+write.csv(up_res2, file='/home/gyw2626/result_up0.csv')
 write.csv(down_res0, file='/home/gyw2626/result_down0.csv')
 
 
@@ -416,37 +417,37 @@ View(fd)
 c <- fd
 
 dup <- which(c$gene %in% c("DKK2", "OPCML", "UCHL1"
-                                 ,"MYH11"
-                                 ,"COMP"
-                                 ,"ADCYAP1"
-                                 ,"CDKN2A"
-                                 ,"VIP"
-                                 ,"STMN2"
-                                 ,"DKK1"
-                                 ,"CALB2"
-                                 ,"CAMK2B"
-                                 ,"COL2A1"
-                                 ,"DRD1"
-                                 ,"SYT1"
-                                 ,"GNG4"
-                                 ,"GAP43"
-                                 ,"ACTC1"
-                                 ,"SCN2B"
-                                 ,"TNNT2"
-                                 ,"SFRP4"
-                                 ,"CACNA1I"
-                                 ,"GNGT1"
-                                 ,"BMP7"
-                                 ,"GRIA4"
-                                 ,"KIF1A"
-                                 ,"NGF"
-                                 ,"ACTG2"
-                                 ,"WNT11"
-                                 ,"TH"
-                                 ,"SCN5A"
-                                 ,"NOS1"
-                                 ,"LDB3"
-                                 ,"TNNC2"))
+                           ,"MYH11"
+                           ,"COMP"
+                           ,"ADCYAP1"
+                           ,"CDKN2A"
+                           ,"VIP"
+                           ,"STMN2"
+                           ,"DKK1"
+                           ,"CALB2"
+                           ,"CAMK2B"
+                           ,"COL2A1"
+                           ,"DRD1"
+                           ,"SYT1"
+                           ,"GNG4"
+                           ,"GAP43"
+                           ,"ACTC1"
+                           ,"SCN2B"
+                           ,"TNNT2"
+                           ,"SFRP4"
+                           ,"CACNA1I"
+                           ,"GNGT1"
+                           ,"BMP7"
+                           ,"GRIA4"
+                           ,"KIF1A"
+                           ,"NGF"
+                           ,"ACTG2"
+                           ,"WNT11"
+                           ,"TH"
+                           ,"SCN5A"
+                           ,"NOS1"
+                           ,"LDB3"
+                           ,"TNNC2"))
 
 c <- c[dup,]
 View(c)
