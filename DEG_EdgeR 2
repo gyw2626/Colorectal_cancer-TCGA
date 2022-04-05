@@ -7,9 +7,6 @@ which(duplicated(final$patient))
 final3 <- final[!duplicated(final$patient),]   #### 476 -> 454
 
 #### expression data에서 환자 n수 맞춰주기
-fd <- t(df)
-fd <- as.data.frame(fd)
-
 zzz <- which(colnames(df) %in% final3$barcode)
 fd1 <- df[,zzz]
 
@@ -23,8 +20,8 @@ group = factor(clinic$ajcc_pathologic_n)
 group = relevel(group, ref="N0")
 
 #### 결측치 확인 후 제거 (없으므로 생략)
-#which(group %in% NA)             
-#group = group[-c(120,351)]
+# which(group %in% NA)             
+# group = group[-c(120,351)]
 
 ####
 group = factor(ifelse(group=="N0","N0","N1"))
@@ -71,7 +68,6 @@ plotSA(efit, main="Final model: Mean-variance trend")
 topGenes <- topTable(efit, number = Inf, adjust.method="BH")
 
 View(topGenes)
-topGenes1 <- topGenes
 
 #### 앙상블 심볼로 변환
 eg1 = bitr(rownames(topGenes), fromType="ENSEMBL", toType="SYMBOL", OrgDb= "org.Hs.eg.db") #### 앙상블 아이디를 심볼로 변환
