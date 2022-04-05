@@ -3,8 +3,8 @@ write.csv(final, file = '/home/gyw2626/colorectal cancer/final.csv')
 final <- read.csv(file = '/home/gyw2626/colorectal cancer/final.csv', header = T)
 
 #### final data에서 환자 바코드 기준으로 중복 행 제거
-final3 <- final[!duplicated(final$patient),]   #### 476 -> 454
 which(duplicated(final$patient))
+final3 <- final[!duplicated(final$patient),]   #### 476 -> 454
 
 #### expression data에서 환자 n수 맞춰주기
 fd <- t(df)
